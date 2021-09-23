@@ -30,6 +30,7 @@ from sklearn import metrics
 import matplotlib.pyplot as plt
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--gpu', type=int, default=0, help='GPU indices')
 parser.add_argument('--gnnlayers', type=int, default=3, help="Number of gnn layers")
 parser.add_argument('--linlayers', type=int, default=1, help="Number of hidden layers")
 parser.add_argument('--epochs', type=int, default=400, help='Number of epochs to train.')
@@ -50,7 +51,8 @@ args.cuda = not args.no_cuda and torch.cuda.is_available()
 if args.cuda is True:
     print('Using GPU')
     torch.cuda.manual_seed(SEED)
-    os.environ["CUDA_VISIBLE_DEVICES"] = "5"
+    # os.environ["CUDA_VISIBLE_DEVICES"] = f"{args.gpu}"
+    torch.cuda.set_device(f'cuda:{args.gpu}')
 
 def clustering(Cluster, feature, true_labels):
     f_adj = np.matmul(feature, np.transpose(feature))
@@ -58,9 +60,9 @@ def clustering(Cluster, feature, true_labels):
     
     cm = clustering_metrics(true_labels, predict_labels)
     db = -metrics.davies_bouldin_score(f_adj, predict_labels)
-    acc, nmi, adj = cm.evaluationClusterModelFromLabel(tqdm)
+    acc, macro_f1, nmi, adj = cm.evaluationClusterModelFromLabel(tqdm)
 
-    return db, acc, nmi, adj
+    return db, acc, macro_f1, nmi, adj
 
 def update_similarity(z, upper_threshold, lower_treshold, pos_num, neg_num):
     f_adj = np.matmul(z, np.transpose(z))
@@ -117,7 +119,7 @@ def gae_for(args):
         sm_fea_s = a.dot(sm_fea_s)
     adj_1st = (adj + sp.eye(n)).toarray()
 
-    db, best_acc, best_nmi, best_adj = clustering(Cluster, sm_fea_s, true_labels)
+    db, best_acc, best_macro_f1, best_nmi, best_adj = clustering(Cluster, sm_fea_s, true_labels)
     
     best_cl = db
     adj_label = torch.FloatTensor(adj_1st)
@@ -194,18 +196,28 @@ def gae_for(args):
             tqdm.write("Epoch: {}, train_loss_gae={:.5f}, time={:.5f}".format(
                 epoch + 1, cur_loss, time.time() - t))
             
-            db, acc, nmi, adjscore = clustering(Cluster, hidden_emb, true_labels)
+            db, acc, macro_f1, nmi, adjscore = clustering(Cluster, hidden_emb, true_labels)
             
             if db >= best_cl:
                 best_cl = db
                 best_acc = acc
+                best_macro_f1 = macro_f1
                 best_nmi = nmi
                 best_adj = adjscore
             
         
     tqdm.write("Optimization Finished!")
-    tqdm.write('best_acc: {}, best_nmi: {}, best_adj: {}'.format(best_acc, best_nmi, best_adj))
-    
+    tqdm.write('best_acc: {}, best_macro: {}, best_nmi: {}, best_adj: {}'.format(best_acc, best_macro_f1, best_nmi, best_adj))
+
+    filename = f'AGE_{args.dataset}_results.csv'
+    if os.path.exists(filename):
+        with open(filename, 'a') as f:
+            f.write(f'{best_acc},{best_macro_f1},{best_nmi}\n')
+    else:
+        with open(filename, 'w') as f:
+            f.write(f'best_acc,best_macro,best_nmi\n')
+            f.write(f'{best_acc},{best_macro_f1},{best_nmi}\n')
+
 
 if __name__ == '__main__':
     gae_for(args)
