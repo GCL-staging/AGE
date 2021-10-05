@@ -15,6 +15,8 @@ import numpy as np
 import scipy.sparse as sp
 import torch
 
+from cluster_eval import logistic_regression
+
 np.random.seed(SEED)
 torch.manual_seed(SEED)
 from torch import optim
@@ -217,6 +219,9 @@ def gae_for(args):
         with open(filename, 'w') as f:
             f.write(f'best_acc,best_macro,best_nmi\n')
             f.write(f'{best_acc},{best_macro_f1},{best_nmi}\n')
+
+    stats = logistic_regression(hidden_emb, true_labels, train_size=0.1)
+    print(stats)
 
 
 if __name__ == '__main__':
